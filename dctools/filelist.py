@@ -1,61 +1,8 @@
 import xml.parsers.expat
 import collections;
 
-Directory = collections.namedtuple('Directory', 'name children subentity')
-File = collections.namedtuple('File', 'name tth size')
-
-#class Entity:
-#    def __init__(self, tag, attrs):
-#        self.name = attrs.pop("Name", "")
-#        self.parent = None;
-#    
-#    def append(self, c):
-#        self.children.append(c);
-#    
-#    def path(self):
-#        parts = list();
-#        if self.name == "":
-#            return "/";
-#        
-#        parts.append(self.name);
-#        
-#        parent = self.parent;
-#
-#        while parent is not None:
-#            parts.append(parent.name);
-#            parent = parent.parent;
-#
-#        parts.reverse();
-#        return "/".join(parts);
-#
-#class File(Entity):
-#    def __init__(self, tag, attrs):
-#        self.tth = attrs.pop("TTH", None)
-#        self.size = attrs.pop("Size", None)
-#        Entity.__init__(self, tag, attrs);
-#    
-#    def repr(self):
-#        return self.name;
-#
-#class Directory(Entity):
-#    def __init__(self, tag, attrs):
-#        self.subentity = dict();
-#        Entity.__init__(self, tag, attrs);
-#    
-#    def repr(self):
-#        return self.name + "/";
-#    
-#    def append(self, c):
-#        self.children.append(c);
-#        self.subentity[c.name] = c;
-
-#class FileListing(Directory):
-#    """
-#    Root element in a filelist.
-#    """
-#    def __init__(self, tag, attrs):
-#        attrs["Name"] = "";
-#        Directory.__init__(self, tag, attrs);
+Directory = collections.namedtuple('Directory', 'name children parent')
+File = collections.namedtuple('File', 'name tth size parent')
 
 def repr_entity(e):
     if isinstance(e, Directory):
@@ -66,6 +13,9 @@ def repr_entity(e):
         return "";
 
 def build_path(e):
+    if not e:
+        return "/";
+    
     parts = list();
     if e.name == "":
         return "/";
@@ -83,16 +33,15 @@ def build_path(e):
 
 def directory_append(d, c):
     d.children.append(c);
-    d.subentity[c.name] = c;
 
-def build_file(name, attrs):
-    return File(attrs.pop("Name", None), attrs.pop("TTH", None), int(attrs.pop("Size", None)));
+def build_file(name, attrs, parent):
+    return File(attrs.pop("Name", None), attrs.pop("TTH", None), int(attrs.pop("Size", None)), parent);
 
-def build_directory(name, attrs):
-    return Directory(attrs.pop("Name"), list(), dict());
+def build_directory(name, attrs, parent):
+    return Directory(attrs.pop("Name"), list(), parent);
 
 def build_filelisting(name, attrs):
-    return Directory("", list(), None, dict());
+    return Directory("", list(), None);
 
 class FileList:
     def __init__(self, fobj):
@@ -112,11 +61,11 @@ class FileList:
         e = None;
 
         if name == 'File':
-            e = build_file(name, attrs);
+            e = build_file(name, attrs, self.tree[-1]);
             self.tth[e.tth] = e;
             self.names[e.name] = e;
         elif name == 'Directory':
-            e = build_directory(name, attrs);
+            e = build_directory(name, attrs, self.tree[-1]);
         elif name == 'FileListing':
             e = build_filelisting(name, attrs);
             self.root = e;
@@ -175,11 +124,11 @@ def find(root, current, path):
         if isinstance(current, File):
             return [];
         
-        for ent in current.subentity:
-            if fnmatch.fnmatch(ent, parts[0]):
-                for cr in rlist(current.subentity[ent], parts[1:]):
+        for child in current.children:
+            if fnmatch.fnmatch(child.name, parts[0]):
+                for cr in rlist(child, parts[1:]):
                     result.append(cr);
-
+        
         return result;
     
     return rlist(current, parts);
@@ -227,9 +176,9 @@ def findentity(root, current, path):
             else:
                 return [];
         
-        for ent in current.subentity:
-            if fnmatch.fnmatch(ent, parts[0]):
-                for cr in rlist(current.subentity[ent], parts[1:]):
+        for child in current.children:
+            if fnmatch.fnmatch(child.name, parts[0]):
+                for cr in rlist(child, parts[1:]):
                     result.append(cr);
         
         return result;

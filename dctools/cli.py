@@ -71,8 +71,8 @@ class TerminalInterpreter(cmd.Cmd):
                             total_files = 0;
                             matching_tths = 0;
                             
-                            if depth > 1:
-                                return 0, 0;
+                            #if depth > 2:
+                            #    return 0, 0;
                             
                             if isinstance(current, dctools.filelist.File):
                                 total_files += 1;
