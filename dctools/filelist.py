@@ -2,17 +2,33 @@ import xml.parsers.expat
 
 class Entity:
     def __init__(self, tag, attrs):
+        self.name = attrs.pop("Name", "")
         self.tag = tag;
         self.children = list();
         self.parent = None;
     
     def append(self, c):
         self.children.append(c);
+    
+    def path(self):
+        parts = list();
+        if self.name == "":
+            return "/";
+        
+        parts.append(self.name);
+        
+        parent = self.parent;
+
+        while parent is not None:
+            parts.append(parent.name);
+            parent = parent.parent;
+
+        parts.reverse();
+        return "/".join(parts);
 
 class File(Entity):
     def __init__(self, tag, attrs):
         self.tth = attrs.pop("TTH", None)
-        self.name = attrs.pop("Name", None)
         self.size = attrs.pop("Size", None)
         Entity.__init__(self, tag, attrs);
     
@@ -21,8 +37,7 @@ class File(Entity):
 
 class Directory(Entity):
     def __init__(self, tag, attrs):
-        self.subdirs = dict();
-        self.name = attrs.pop("Name", "")
+        self.subentity = dict();
         Entity.__init__(self, tag, attrs);
     
     def repr(self):
@@ -30,8 +45,7 @@ class Directory(Entity):
     
     def append(self, c):
         self.children.append(c);
-        if isinstance(c, Directory):
-            self.subdirs[c.name] = c;
+        self.subentity[c.name] = c;
 
 class FileListing(Directory):
     """
@@ -86,36 +100,102 @@ class FileList:
         #print 'Character data:', repr(data)
 
 def find(root, current, path):
+    import fnmatch;
+
     if path == "":
-        return current;
+        return current.children;
     
     parts = path.split("/");
-
+    
     if len(parts) <= 0:
-        return current;
+        return current.children;
     
     # then we are at root
     if parts[0] == "":
         current = root;
         parts = parts[1:];
     
-    while current is not None and len(parts) > 0:
+    def rlist(current, parts):
+        result = list();
+        
         if current is None:
-            return None;
+            return [];
         
-        if parts[0] == "" or parts[0] == ".":
-            parts = parts[1:];
-            continue;
+        while True and len(parts) > 0:
+            if parts[0] == "" or parts[0] == ".":
+                parts = parts[1:];
+                continue;
+            
+            if parts[0] == "..":
+                current = current.parent;
+                parts = parts[1:];
+                continue;
+            
+            break;
+
+        if len(parts) <= 0:
+            return current.children;
         
-        if parts[0] == "..":
-            current = current.parent;
-            parts = parts[1:];
-            continue;
+        if isinstance(current, File):
+            return [];
         
-        current = current.subdirs.get(parts[0], None)
+        for ent in current.subentity:
+            if fnmatch.fnmatch(ent, parts[0]):
+                for cr in rlist(current.subentity[ent], parts[1:]):
+                    result.append(cr);
+
+        return result;
+    
+    return rlist(current, parts);
+
+def findentity(root, current, path):
+    import fnmatch;
+
+    if path == "":
+        return [current];
+    
+    parts = path.split("/");
+    
+    if len(parts) <= 0:
+        return [current];
+    
+    # then we are at root
+    if parts[0] == "":
+        current = root;
         parts = parts[1:];
     
-    return current;
-
-def findcomplete(root, current, path):
-    return path.split("/");
+    def rlist(current, parts):
+        result = list();
+        
+        if current is None:
+            return [];
+        
+        while True and len(parts) > 0:
+            if parts[0] == "" or parts[0] == ".":
+                parts = parts[1:];
+                continue;
+            
+            if parts[0] == "..":
+                current = current.parent;
+                parts = parts[1:];
+                continue;
+            
+            break;
+        
+        if len(parts) <= 0:
+            return [current];
+        
+        if isinstance(current, File):
+            if len(parts) == 1:
+                return [current];
+            else:
+                return [];
+        
+        for ent in current.subentity:
+            if fnmatch.fnmatch(ent, parts[0]):
+                for cr in rlist(current.subentity[ent], parts[1:]):
+                    result.append(cr);
+        
+        return result;
+    
+    return rlist(current, parts);
