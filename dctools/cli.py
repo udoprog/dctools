@@ -3,63 +3,126 @@ import cmd
 import bz2
 
 import dctools.filelist;
+import musync.printer;
+
+class CliPrinter(musync.printer.TermCaps):
+    def warning(self, *text):
+        self._writeall(self.c.red, self._joinstrings(text), self.c.sgr0, "\n");
+
+    def error(self, *text):
+        self._writeall(self.c.red, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
+    
+    def notice(self, *text):
+        self._writeall(self.c.blue, self._joinstrings(text), self.c.sgr0, "\n");
+    
+    def boldnotice(self, *text):
+        self._writeall(self.c.magenta, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
+
+    def partialnotice(self, *text):
+        self._writeall(self.c.magenta, self._joinstrings(text), self.c.sgr0, "\n");
 
 class TerminalInterpreter(cmd.Cmd):
     identchars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/"
     prompt = "> "
     
-    def __init__(self):
+    def __init__(self, filelist):
         import readline;
         cmd.Cmd.__init__(self);
+
+        self.printer = CliPrinter(self.stdout);
+        
+        self.printer.notice("Opening own file list...");
+        
+        try:
+            self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
+        except Exception, e:
+            self.printer.error("Failed to open list:", str(e));
+            sys.exit(1);
+            return;
+        
         self.open_list = None;
         self.current = None;
+        self.handles = dict();
         readline.set_completer_delims(' \t\n/');
     
     def do_ls(self, text):
         if not self.open_list:
-            self.stdout.write("No open lists\n");
+            self.printer.error("no open lists");
             return;
         
         n = dctools.filelist.findentity(self.open_list.root, self.current, text);
         
         if not n:
-            self.stdout.write("not a directory: " + text + "\n");
+            self.printer.error("not a directory:", text);
             return;
 
         if len(n) == 0:
-            self.stdout.write("(empty directory)\n");
+            self.printer.warning("(empty directory)");
             return;
         
         for r in n:
             if isinstance(r, dctools.filelist.Directory):
-                self.stdout.write(r.path() + ":\n");
+                self.printer.notice(r.path() + ":");
                 
                 for c in r.children:
-                    self.stdout.write(c.repr() + "\n");
-                    self.stdout.write("");
+                    if isinstance(c, dctools.filelist.File):
+                        if self.own_list.tth.has_key(c.tth):
+                            self.printer.notice(c.repr());
+                        else:
+                            self.printer.boldnotice(c.repr());
+                    elif isinstance(c, dctools.filelist.Directory):
+                        def find_tth_statistics(own_list, current, depth):
+                            total_files = 0;
+                            matching_tths = 0;
+                            
+                            if depth > 1:
+                                return 0, 0;
+                            
+                            if isinstance(current, dctools.filelist.File):
+                                total_files += 1;
+                                if self.own_list.tth.has_key(current.tth):
+                                    matching_tths += 1;
+                            elif isinstance(current, dctools.filelist.Directory):
+                                for cc in current.children:
+                                    total, matching = find_tth_statistics(own_list, cc, depth + 1);
+                                    total_files += total;
+                                    matching_tths += matching;
+                            
+                            return total_files, matching_tths;
+                        
+                        total, matching = find_tth_statistics(self.own_list, c, 0);
+                        
+                        if total == matching:
+                            self.printer.notice(c.repr());
+                        elif matching == 0:
+                            self.printer.boldnotice(c.repr());
+                        else:
+                            self.printer.partialnotice(c.repr());
+                    else:
+                        self.printer.notice(c.repr());
             else:
-                self.stdout.write("Not a directory: " + r.path());
+                self.printer.error("not a directory:", r.path());
     
     def do_cd(self, text):
         if not self.open_list:
-            self.stdout.write("No open lists\n");
+            self.printer.error("no open lists");
             return;
         
         n = dctools.filelist.findentity(self.open_list.root, self.current, text);
         
         if not n:
-            self.stdout.write("not a directory: " + text + "\n");
+            self.printer.error("not a directory:", text);
             return;
         
         if len(n) > 1:
-            self.stdout.write("not a single match: " + text + "\n");
+            self.printer.error("not a single match:", text);
             return;
         
         self.current = n[0];
     
     def do_info(self, text):
         if not self.open_list:
-            self.stdout.write("No open lists\n");
+            self.printer.error("no open lists");
             return;
         
         for n in dctools.filelist.findentity(self.open_list.root, self.current, text):
@@ -89,7 +152,7 @@ class TerminalInterpreter(cmd.Cmd):
         try:
           self.open_list = dctools.filelist.FileList(bz2.BZ2File(text, "r"));
         except Exception, e:
-          self.stdout.write(str(e) + "\n");
+          self.printer.notice(str(e) + "");
           return;
         
         self.current = self.open_list.root;
@@ -118,10 +181,10 @@ class TerminalInterpreter(cmd.Cmd):
         #print line, text;
         
     def help_ls(self):
-        self.stdout.write("ls: list a directory\n");
+        self.printer.notice("ls: list a directory");
     
     def help_cd(self):
-        self.stdout.write("cd: change the current directory\n");
-
+        self.printer.notice("cd: change the current directory");
+    
     def help_open(self):
-        self.stdout.write("open: open a specific filelist\n");
+        self.printer.notice("open: open a specific filelist");
