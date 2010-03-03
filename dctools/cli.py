@@ -7,6 +7,8 @@ import dctools.filelist;
 import musync.printer;
 
 class CliPrinter(musync.printer.TermCaps):
+    columns = 120;
+
     def warning(self, *text):
         self._writeall(self.c.red, self._joinstrings(text), self.c.sgr0, "\n");
 
@@ -19,8 +21,41 @@ class CliPrinter(musync.printer.TermCaps):
     def boldnotice(self, *text):
         self._writeall(self.c.magenta, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
 
+    def missingnotice(self, *text):
+        self._writeall(self.c.red, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
+    
     def partialnotice(self, *text):
-        self._writeall(self.c.magenta, self._joinstrings(text), self.c.sgr0, "\n");
+        self._writeall(self.c.yellow, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
+    
+    def existingnotice(self, *text):
+        self._writeall(self.c.green, self.c.bold, self._joinstrings(text), self.c.sgr0, "\n");
+    
+    def listall(self, color, text):
+        w = 0;
+        
+        for t in text:
+            if len(t) > w:
+                w = len(t);
+        
+        w += 3;
+        cols = int(self.columns / w);
+        
+        if cols == 0:
+            for res in text:
+                self._writeall(color, res, self.c.sgr0);
+        else:
+            colw = int(self.columns / cols);
+            
+            while len(text) > 0:
+                for i in range(cols):
+                    if len(text) <= 0:
+                        break;
+
+                    res = text.pop();
+                    res += " "*(colw - len(res));
+                    self._writeall(color, res, self.c.sgr0);
+                
+                self._writeall("\n");
 
 class TerminalInterpreter(cmd.Cmd):
     identchars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/"
@@ -38,12 +73,14 @@ class TerminalInterpreter(cmd.Cmd):
             "my-list": self.my_list,
             "my-filelists": self.my_filelists,
             "my-dc++": self.my_dcpp,
+            "columns": self.set_columns,
         };
         
         self.printer = CliPrinter(self.stdout);
         
         self.own_list = None;
         self.open_list = None;
+        self.available_filelists = list();
         self.handles = dict();
         self.variables = dict();
         
@@ -51,6 +88,17 @@ class TerminalInterpreter(cmd.Cmd):
 		
         self.setup();
         self.load();
+
+    def set_columns(self, val):
+        try:
+            self.printer.columns = int(val);
+            if self.printer.columns < 10:
+                self.printer.columns = 10;
+            return str(self.printer.columns);
+        except:
+            self.printer.error("Bad columns value");
+        
+        return val;
 
     def setup(self):
         self.config = os.path.expanduser(self.config);
@@ -89,27 +137,42 @@ class TerminalInterpreter(cmd.Cmd):
             self.variables[key] = val;
     
     def my_list(self, val):
-        val = os.path.expanduser(val);
-        self.printer.notice("Loading my-list:", val);
+        filelist = os.path.expanduser(val);
         
-        try:
-            self.own_list = dctools.filelist.FileList(bz2.BZ2File(val, "r"));
-        except OSError, e:
-            self.printer.error("cannot open file list:", val);
+        if os.path.isfile(filelist):
+            self.printer.notice("Loading my-list:", filelist);
+            
+            try:
+                self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
+            except OSError, e:
+                self.printer.error("cannot open file list:", filelist);
+        else:
+            self.printer.warning("Not a file:", filelist);
         
-        return val;
+        return filelist;
 
     def my_dcpp(self, val):
         dcpp = os.path.expanduser(val);
         dcpp_mylist = os.path.join(dcpp, "files.xml.bz2")
+        dcpp_filelists = os.path.join(dcpp, "FileLists")
         
         if os.path.isfile(dcpp_mylist):
             self._set_variable("my-list", dcpp_mylist);
+
+        if os.path.isdir(dcpp_filelists):
+            self._set_variable("my-filelists", dcpp_filelists);
         
         return dcpp;
     
     def my_filelists(self, val):
         filelists = os.path.expanduser(val);
+        
+        if os.path.isdir(filelists):
+            self.printer.notice("Loading FileLists from:", filelists);
+            self.available_filelists = os.listdir(filelists);
+        else:
+            self.printer.warning("Not a directory:", filelists);
+        
         return filelists;
     
     def do_refresh(self):
@@ -176,14 +239,18 @@ class TerminalInterpreter(cmd.Cmd):
         
         for r in n:
             if isinstance(r, dctools.filelist.Directory):
-                self.printer.notice(dctools.filelist.build_path(r) + ":");
+                self.printer.boldnotice(dctools.filelist.build_path(r) + ":");
+                
+                partial = list();
+                missing = list();
+                existing = list();
                 
                 for c in r.children:
                     if isinstance(c, dctools.filelist.File):
                         if self.own_list and self.own_list.tth.has_key(c.tth):
-                            self.printer.notice(dctools.filelist.repr_entity(c));
+                            existing.append(dctools.filelist.repr_entity(c));
                         else:
-                            self.printer.boldnotice(dctools.filelist.repr_entity(c));
+                            missing.append(dctools.filelist.repr_entity(c));
                     elif isinstance(c, dctools.filelist.Directory):
                         def find_tth_statistics(own_list, current, depth):
                             total_files = 0;
@@ -208,13 +275,23 @@ class TerminalInterpreter(cmd.Cmd):
                             total, matching = find_tth_statistics(self.own_list, c, 0);
                         
                         if total == matching:
-                            self.printer.notice(dctools.filelist.repr_entity(c));
+                            existing.append(dctools.filelist.repr_entity(c));
                         elif matching == 0:
-                            self.printer.boldnotice(dctools.filelist.repr_entity(c));
+                            missing.append(dctools.filelist.repr_entity(c));
                         else:
-                            self.printer.partialnotice(dctools.filelist.repr_entity(c));
-                    else:
-                        self.printer.notice(dctools.filelist.repr_entity(c));
+                            partial.append(dctools.filelist.repr_entity(c));
+
+                if len(missing) > 0:
+                    self.printer.missingnotice("== Missing Files ==");
+                    self.printer.listall(self.printer.c.red, missing);
+
+                if len(partial) > 0:
+                    self.printer.partialnotice("== Partial Files ==");
+                    self.printer.listall(self.printer.c.yellow, partial);
+                
+                if len(existing) > 0:
+                    self.printer.existingnotice("== Existing Files ==");
+                    self.printer.listall(self.printer.c.green, existing);
             else:
                 self.printer.error("not a directory:", dctools.filelist.build_path(r));
     
@@ -276,15 +353,18 @@ class TerminalInterpreter(cmd.Cmd):
         return self._complete_dir(text, line, begidx, endidx);
     
     def do_open(self, text):
-        if self.open_list:
-            del self.open_list;
+        path = os.path.join(self.variables.get("my-filelists", ""), text);
         
         try:
-          self.open_list = dctools.filelist.FileList(bz2.BZ2File(text, "r"));
+          open_list = dctools.filelist.FileList(bz2.BZ2File(path, "r"));
         except Exception, e:
-          self.printer.notice(str(e) + "");
+          self.printer.error("could not open filelist", str(e));
           return;
+        
+        if self.open_list:
+            del self.open_list;
 
+        self.open_list = open_list;
         self.pwd = [];
     
     def complete_ls(self, text, line, begidx, endidx):
@@ -315,7 +395,10 @@ class TerminalInterpreter(cmd.Cmd):
         #if not self.open_list:
         #    return [];
         #print line, text;
-        
+    
+    def complete_open(self, text, line, begidx, endidx):
+        return filter(lambda fl: fl.startswith(text), self.available_filelists);
+    
     def help_ls(self):
         self.printer.notice("ls: list a directory");
     
