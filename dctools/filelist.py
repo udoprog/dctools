@@ -1,59 +1,98 @@
 import xml.parsers.expat
+import collections;
 
-class Entity:
-    def __init__(self, tag, attrs):
-        self.name = attrs.pop("Name", "")
-        self.tag = tag;
-        self.children = list();
-        self.parent = None;
+Directory = collections.namedtuple('Directory', 'name children subentity')
+File = collections.namedtuple('File', 'name tth size')
+
+#class Entity:
+#    def __init__(self, tag, attrs):
+#        self.name = attrs.pop("Name", "")
+#        self.parent = None;
+#    
+#    def append(self, c):
+#        self.children.append(c);
+#    
+#    def path(self):
+#        parts = list();
+#        if self.name == "":
+#            return "/";
+#        
+#        parts.append(self.name);
+#        
+#        parent = self.parent;
+#
+#        while parent is not None:
+#            parts.append(parent.name);
+#            parent = parent.parent;
+#
+#        parts.reverse();
+#        return "/".join(parts);
+#
+#class File(Entity):
+#    def __init__(self, tag, attrs):
+#        self.tth = attrs.pop("TTH", None)
+#        self.size = attrs.pop("Size", None)
+#        Entity.__init__(self, tag, attrs);
+#    
+#    def repr(self):
+#        return self.name;
+#
+#class Directory(Entity):
+#    def __init__(self, tag, attrs):
+#        self.subentity = dict();
+#        Entity.__init__(self, tag, attrs);
+#    
+#    def repr(self):
+#        return self.name + "/";
+#    
+#    def append(self, c):
+#        self.children.append(c);
+#        self.subentity[c.name] = c;
+
+#class FileListing(Directory):
+#    """
+#    Root element in a filelist.
+#    """
+#    def __init__(self, tag, attrs):
+#        attrs["Name"] = "";
+#        Directory.__init__(self, tag, attrs);
+
+def repr_entity(e):
+    if isinstance(e, Directory):
+        return e.name + "/";
+    elif isinstance(e, File):
+        return e.name;
+    else:
+        return "";
+
+def build_path(e):
+    parts = list();
+    if e.name == "":
+        return "/";
     
-    def append(self, c):
-        self.children.append(c);
+    parts.append(e.name);
     
-    def path(self):
-        parts = list();
-        if self.name == "":
-            return "/";
-        
-        parts.append(self.name);
-        
-        parent = self.parent;
+    parent = e.parent;
 
-        while parent is not None:
-            parts.append(parent.name);
-            parent = parent.parent;
-
-        parts.reverse();
-        return "/".join(parts);
-
-class File(Entity):
-    def __init__(self, tag, attrs):
-        self.tth = attrs.pop("TTH", None)
-        self.size = attrs.pop("Size", None)
-        Entity.__init__(self, tag, attrs);
+    while parent is not None:
+        parts.append(e.name);
+        parent = parent.parent;
     
-    def repr(self):
-        return self.name;
+    parts.reverse();
+    return "/".join(parts);
 
-class Directory(Entity):
-    def __init__(self, tag, attrs):
-        self.subentity = dict();
-        Entity.__init__(self, tag, attrs);
-    
-    def repr(self):
-        return self.name + "/";
-    
-    def append(self, c):
-        self.children.append(c);
-        self.subentity[c.name] = c;
+def directory_append(d, c):
+    d.children.append(c);
+    d.subentity[c.name] = c;
 
-class FileListing(Directory):
-    """
-    Root element in a filelist.
-    """
-    def __init__(self, tag, attrs):
-        attrs["Name"] = "";
-        Directory.__init__(self, tag, attrs);
+def build_file(name, attrs):
+    return File(attrs.pop("Name", None), attrs.pop("TTH", None), int(attrs.pop("Size", None)));
+
+def build_directory(name, attrs):
+    return Directory(attrs.pop("Name"), list(), dict());
+
+def build_filelisting(name, attrs):
+    return Directory("", list(), None, dict());
 
 class FileList:
     def __init__(self, fobj):
@@ -67,33 +106,30 @@ class FileList:
         self.p.EndElementHandler = self.end_element
         self.p.CharacterDataHandler = self.char_data
         self.p.ParseFile(fobj);
+        del self.p;
 
     def start_element(self, name, attrs):
         e = None;
 
         if name == 'File':
-            e = File(name, attrs);
+            e = build_file(name, attrs);
             self.tth[e.tth] = e;
             self.names[e.name] = e;
         elif name == 'Directory':
-            e = Directory(name, attrs);
+            e = build_directory(name, attrs);
         elif name == 'FileListing':
-            e = FileListing(name, attrs);
+            e = build_filelisting(name, attrs);
             self.root = e;
             self.tree.append(self.root);
             return;
-
-        e.parent = self.tree[-1];
+        
         self.tree.append(e);
 
     def end_element(self, name):
         e = self.tree.pop();
-        assert e.tag == name;
-
         if e == self.root:
             return;
-
-        self.tree[-1].append(e);
+        directory_append(self.tree[-1], e);
 
     def char_data(self, data):
         pass;

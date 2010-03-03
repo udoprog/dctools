@@ -1,6 +1,7 @@
-import os
-import cmd
-import bz2
+import os;
+import cmd;
+import bz2;
+import sys;
 
 import dctools.filelist;
 import musync.printer;
@@ -33,12 +34,7 @@ class TerminalInterpreter(cmd.Cmd):
         
         self.printer.notice("Opening own file list...");
         
-        try:
-            self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
-        except Exception, e:
-            self.printer.error("Failed to open list:", str(e));
-            sys.exit(1);
-            return;
+        self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
         
         self.open_list = None;
         self.current = None;
@@ -62,14 +58,14 @@ class TerminalInterpreter(cmd.Cmd):
         
         for r in n:
             if isinstance(r, dctools.filelist.Directory):
-                self.printer.notice(r.path() + ":");
+                self.printer.notice(dctools.filelist.build_path(r) + ":");
                 
                 for c in r.children:
                     if isinstance(c, dctools.filelist.File):
                         if self.own_list.tth.has_key(c.tth):
-                            self.printer.notice(c.repr());
+                            self.printer.notice(dctools.filelist.repr_entity(c));
                         else:
-                            self.printer.boldnotice(c.repr());
+                            self.printer.boldnotice(dctools.filelist.repr_entity(c));
                     elif isinstance(c, dctools.filelist.Directory):
                         def find_tth_statistics(own_list, current, depth):
                             total_files = 0;
@@ -93,15 +89,15 @@ class TerminalInterpreter(cmd.Cmd):
                         total, matching = find_tth_statistics(self.own_list, c, 0);
                         
                         if total == matching:
-                            self.printer.notice(c.repr());
+                            self.printer.notice(dctools.filelist.repr_entity(c));
                         elif matching == 0:
-                            self.printer.boldnotice(c.repr());
+                            self.printer.boldnotice(dctools.filelist.repr_entity(c));
                         else:
-                            self.printer.partialnotice(c.repr());
+                            self.printer.partialnotice(dctools.filelist.repr_entity(c));
                     else:
-                        self.printer.notice(c.repr());
+                        self.printer.notice(dctools.filelist.repr_entity(c));
             else:
-                self.printer.error("not a directory:", r.path());
+                self.printer.error("not a directory:", dctools.filelist.build_path(r));
     
     def do_cd(self, text):
         if not self.open_list:
@@ -174,7 +170,7 @@ class TerminalInterpreter(cmd.Cmd):
             lookup = rest[:-len(text)];
         
         n = dctools.filelist.find(self.open_list.root, self.current, lookup);
-        return map(lambda c: c.repr(), filter(lambda c: c.name.startswith(text), n))
+        return map(lambda c: dctools.filelist.repr_entity(c), filter(lambda c: c.name.startswith(text), n))
         
         #if not self.open_list:
         #    return [];
