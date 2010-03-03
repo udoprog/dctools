@@ -23,6 +23,7 @@ class CliPrinter(musync.printer.TermCaps):
         self._writeall(self.c.magenta, self._joinstrings(text), self.c.sgr0, "\n");
 
 class TerminalInterpreter(cmd.Cmd):
+    identchars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/"
     prompt = "> ";
     config = "~/.dcirc";
     config_set = "=";
@@ -32,12 +33,13 @@ class TerminalInterpreter(cmd.Cmd):
         import readline;
         cmd.Cmd.__init__(self);
         
+        self.pwd = "";
         self.triggers = {
             "my-list": self.my_list,
             "my-filelists": self.my_filelists,
             "my-dc++": self.my_dcpp,
         };
-
+        
         self.printer = CliPrinter(self.stdout);
         
         self.own_list = None;
@@ -157,12 +159,18 @@ class TerminalInterpreter(cmd.Cmd):
             self.printer.error("no open lists");
             return;
         
-        n = dctools.filelist.findentity(self.open_list.root, self.current, text);
+        r = dctools.filelist.resolve(self.pwd, text)
+        
+        if r is None:
+            self.printer.error("no such directory:", text);
+            return;
+        
+        n = dctools.filelist.findone(self.open_list.root, r);
         
         if not n:
             self.printer.error("not a directory:", text);
             return;
-
+        
         if len(n) == 0:
             self.printer.warning("(empty directory)");
             return;
@@ -173,7 +181,7 @@ class TerminalInterpreter(cmd.Cmd):
                 
                 for c in r.children:
                     if isinstance(c, dctools.filelist.File):
-                        if self.own_list.tth.has_key(c.tth):
+                        if self.own_list and self.own_list.tth.has_key(c.tth):
                             self.printer.notice(dctools.filelist.repr_entity(c));
                         else:
                             self.printer.boldnotice(dctools.filelist.repr_entity(c));
@@ -181,9 +189,6 @@ class TerminalInterpreter(cmd.Cmd):
                         def find_tth_statistics(own_list, current, depth):
                             total_files = 0;
                             matching_tths = 0;
-                            
-                            #if depth > 2:
-                            #    return 0, 0;
                             
                             if isinstance(current, dctools.filelist.File):
                                 total_files += 1;
@@ -219,7 +224,13 @@ class TerminalInterpreter(cmd.Cmd):
             self.printer.error("no open lists");
             return;
         
-        n = dctools.filelist.findentity(self.open_list.root, self.current, text);
+        r = dctools.filelist.resolve(self.pwd, text)
+        
+        if r is None:
+            self.printer.error("no such directory:", text);
+            return;
+        
+        n = dctools.filelist.findone(self.open_list.root, r);
         
         if not n:
             self.printer.error("not a directory:", text);
@@ -228,15 +239,25 @@ class TerminalInterpreter(cmd.Cmd):
         if len(n) > 1:
             self.printer.error("not a single match:", text);
             return;
+
+        file = n[0];
+
+        if not isinstance(file, dctools.filelist.Directory):
+            self.printer.error("not a file:", text);
+            return;
         
-        self.current = n[0];
+        self.pwd = "/".join(r);
+        self.current = file;
+
+    def do_pwd(self, text):
+        self.printer.notice("/" + self.pwd);
     
     def do_info(self, text):
         if not self.open_list:
             self.printer.error("no open lists");
             return;
         
-        for n in dctools.filelist.findentity(self.open_list.root, self.current, text):
+        for n in dctools.filelist.findone(self.open_list.root, self.current, text):
             if isinstance(n, dctools.filelist.File):
                 print "Name:", n.name;
                 print "Size:", n.size;
@@ -276,7 +297,7 @@ class TerminalInterpreter(cmd.Cmd):
 
         if not self.open_list:
             return [];
-        
+
         rest = " ".join(line.split(" ")[1:]);
         
         if text == "":
@@ -284,7 +305,13 @@ class TerminalInterpreter(cmd.Cmd):
         else:
             lookup = rest[:-len(text)];
         
-        n = dctools.filelist.find(self.open_list.root, self.current, lookup);
+        r = dctools.filelist.resolve(self.pwd, lookup);
+        
+        if r is None:
+            return [];
+        
+        n = dctools.filelist.find(self.open_list.root, r);
+        
         return map(lambda c: dctools.filelist.repr_entity(c), filter(lambda c: c.name.startswith(text), n))
         
         #if not self.open_list:

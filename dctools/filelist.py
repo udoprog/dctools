@@ -86,21 +86,8 @@ class FileList:
         pass;
         #print 'Character data:', repr(data)
 
-def find(root, current, path):
+def find(root, parts):
     import fnmatch;
-
-    if path == "":
-        return current.children;
-    
-    parts = path.split("/");
-    
-    if len(parts) <= 0:
-        return current.children;
-    
-    # then we are at root
-    if parts[0] == "":
-        current = root;
-        parts = parts[1:];
     
     def rlist(current, parts):
         result = list();
@@ -108,18 +95,6 @@ def find(root, current, path):
         if current is None:
             return [];
         
-        while True and len(parts) > 0:
-            if parts[0] == "" or parts[0] == ".":
-                parts = parts[1:];
-                continue;
-            
-            if parts[0] == "..":
-                current = current.parent;
-                parts = parts[1:];
-                continue;
-            
-            break;
-
         if len(parts) <= 0:
             return current.children;
         
@@ -133,41 +108,13 @@ def find(root, current, path):
         
         return result;
     
-    return rlist(current, parts);
+    return rlist(root, parts);
 
-def findentity(root, current, path):
+def findone(root, parts):
     import fnmatch;
-
-    if path == "":
-        return [current];
-    
-    parts = path.split("/");
-    
-    if len(parts) <= 0:
-        return [current];
-    
-    # then we are at root
-    if parts[0] == "":
-        current = root;
-        parts = parts[1:];
-    
+   
     def rlist(current, parts):
         result = list();
-        
-        if current is None:
-            return [];
-        
-        while True and len(parts) > 0:
-            if parts[0] == "" or parts[0] == ".":
-                parts = parts[1:];
-                continue;
-            
-            if parts[0] == "..":
-                current = current.parent;
-                parts = parts[1:];
-                continue;
-            
-            break;
         
         if len(parts) <= 0:
             return [current];
@@ -185,4 +132,32 @@ def findentity(root, current, path):
         
         return result;
     
-    return rlist(current, parts);
+    return rlist(root, parts);
+
+def resolve(*path):
+    parts = list();
+    
+    for p in path:
+        if len(p) > 0 and p[0] == "/":
+            parts = list();
+        parts.extend(p.split("/"));
+    
+    parts.reverse();
+    result = list();
+    
+    while len(parts) > 0:
+        v = parts.pop();
+        
+        if v == "." or v == "":
+            continue;
+        
+        if v == "..":
+            if len(result) == 0:
+                return None;
+            
+            result.pop();
+            continue;
+        
+        result.append(v);
+    
+    return result;
