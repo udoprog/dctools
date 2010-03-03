@@ -23,24 +23,135 @@ class CliPrinter(musync.printer.TermCaps):
         self._writeall(self.c.magenta, self._joinstrings(text), self.c.sgr0, "\n");
 
 class TerminalInterpreter(cmd.Cmd):
-    identchars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/"
-    prompt = "> "
+    prompt = "> ";
+    config = "~/.dcirc";
+    config_set = "=";
+    comment_char = "#";
     
-    def __init__(self, filelist):
+    def __init__(self):
         import readline;
         cmd.Cmd.__init__(self);
+        
+        self.triggers = {
+            "my-list": self.my_list,
+            "my-filelists": self.my_filelists,
+            "my-dc++": self.my_dcpp,
+        };
 
         self.printer = CliPrinter(self.stdout);
         
-        self.printer.notice("Opening own file list...");
-        
-        self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
-        
+        self.own_list = None;
         self.open_list = None;
         self.current = None;
         self.handles = dict();
+        self.variables = dict();
+        
         readline.set_completer_delims(' \t\n/');
+		
+        self.setup();
+        self.load();
+
+    def setup(self):
+        self.config = os.path.expanduser(self.config);
+        self.do_refresh();
+
+    def load(self):
+        self.printer.notice("Opening own file list...");
+        #self.own_list = dctools.filelist.FileList(bz2.BZ2File(filelist, "r"));
+        
+    def _read_config_line(self, line):
+        line = line.strip();
+
+        if len(line) <= 0:
+            return;
+        
+        if line[0] == self.comment_char:
+            return;
+
+        i = line.find(self.config_set);
+        
+        if i <= 0:
+            return;
+
+        if len(line) < i + 1:
+            return;
+        
+        key = line[:i].strip();
+        val = line[i+1:].strip();
+        
+        self._set_variable(key, val);
+
+    def _set_variable(self, key, val):
+        if self.triggers.has_key(key):
+            self.variables[key] = self.triggers[key](val);
+        else:
+            self.variables[key] = val;
     
+    def my_list(self, val):
+        val = os.path.expanduser(val);
+        self.printer.notice("Loading my-list:", val);
+        
+        try:
+            self.own_list = dctools.filelist.FileList(bz2.BZ2File(val, "r"));
+        except OSError, e:
+            self.printer.error("cannot open file list:", val);
+        
+        return val;
+
+    def my_dcpp(self, val):
+        dcpp = os.path.expanduser(val);
+        dcpp_mylist = os.path.join(dcpp, "files.xml.bz2")
+        
+        if os.path.isfile(dcpp_mylist):
+            self._set_variable("my-list", dcpp_mylist);
+        
+        return dcpp;
+    
+    def my_filelists(self, val):
+        filelists = os.path.expanduser(val);
+        return filelists;
+    
+    def do_refresh(self):
+        if not os.path.isfile(self.config):
+            self.printer.notice("creating:", self.config);
+            try:
+                open(self.config, "w").close();
+            except OSError, e:
+                self.printer.error("could not create configuration:", str(e));
+                return;
+        
+        self.printer.notice("Refreshing configuration");
+        
+        try:
+            cf = open(self.config, "r");
+        except OSError, e:
+            self.printer.error("could not open configuration:", str(e));
+            return;
+		
+        for line in cf:
+            self._read_config_line(line);
+        
+        cf.close();
+
+    def do_save(self, text):
+        try:
+            cf = open(self.config, "w");
+        except OSError, e:
+            self.printer.error("could not open configuration:", str(e));
+            return;
+		
+        for v in self.variables:
+            cf.write(v + "=" + self.variables[v] + "\n");
+        
+        cf.close();
+
+    def do_set(self, text):
+        if text == "":
+            for v in self.variables:
+                self.printer.notice(v, "=", self.variables[v]);
+        else:
+            self._read_config_line(text);
+
     def do_ls(self, text):
         if not self.open_list:
             self.printer.error("no open lists");
@@ -86,7 +197,11 @@ class TerminalInterpreter(cmd.Cmd):
                             
                             return total_files, matching_tths;
                         
-                        total, matching = find_tth_statistics(self.own_list, c, 0);
+                        if not self.own_list:
+                            total = 0;
+                            matching = 0;
+                        else:
+                            total, matching = find_tth_statistics(self.own_list, c, 0);
                         
                         if total == matching:
                             self.printer.notice(dctools.filelist.repr_entity(c));

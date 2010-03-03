@@ -19,17 +19,19 @@ def build_path(e):
     parts = list();
     if e.name == "":
         return "/";
-    
-    parts.append(e.name);
-    
-    parent = e.parent;
 
-    while parent is not None:
-        parts.append(e.name);
-        parent = parent.parent;
+    return e.name;
     
-    parts.reverse();
-    return "/".join(parts);
+#    parts.append(e.name);
+#    
+#    parent = e.parent;
+#
+#    while parent is not None:
+#        parts.append(e.name);
+#        parent = parent.parent;
+#    
+#    parts.reverse();
+#    return "/".join(parts);
 
 def directory_append(d, c):
     d.children.append(c);

@@ -4,11 +4,7 @@ import sys;
 import dctools.cli;
 
 def main(argv):
-    if len(argv) < 1:
-        print "usage: dci <filelist>";
-        return 1;
-    
-    term = dctools.cli.TerminalInterpreter(argv[0]);
+    term = dctools.cli.TerminalInterpreter();
     term.cmdloop();
 
 def entrypoint():
