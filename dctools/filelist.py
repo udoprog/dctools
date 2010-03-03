@@ -89,31 +89,31 @@ def find(root, current, path):
     if path == "":
         return current;
     
-    if path[0] == '/':
+    parts = path.split("/");
+
+    if len(parts) <= 0:
+        return current;
+    
+    # then we are at root
+    if parts[0] == "":
         current = root;
-        path = path[1:]
+        parts = parts[1:];
     
-    dirs = path.split("/");
-    
-    while len(dirs) > 0:
+    while current is not None and len(parts) > 0:
         if current is None:
             return None;
-
-        if dirs[0] == "" or dirs[0] == ".":
-            dirs = dirs[1:];
+        
+        if parts[0] == "" or parts[0] == ".":
+            parts = parts[1:];
             continue;
-
-        if dirs[0] == "..":
+        
+        if parts[0] == "..":
             current = current.parent;
-            dirs = dirs[1:];
+            parts = parts[1:];
             continue;
         
-        current = current.subdirs.get(dirs[0], None)
-        
-        if not isinstance(current, Directory):
-            return None;
-        
-        dirs = dirs[1:];
+        current = current.subdirs.get(parts[0], None)
+        parts = parts[1:];
     
     return current;
 

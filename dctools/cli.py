@@ -13,7 +13,7 @@ class TerminalInterpreter(cmd.Cmd):
         cmd.Cmd.__init__(self);
         self.open_list = None;
         self.current = None;
-        readline.set_completer_delims(' \t\n');
+        readline.set_completer_delims(' \t\n/');
     
     def do_ls(self, text):
         if not self.open_list:
@@ -57,6 +57,7 @@ class TerminalInterpreter(cmd.Cmd):
           self.open_list = dctools.filelist.FileList(bz2.BZ2File(text, "r"));
         except Exception, e:
           self.stdout.write(str(e) + "\n");
+          return;
         
         self.current = self.open_list.root;
     
@@ -67,25 +68,32 @@ class TerminalInterpreter(cmd.Cmd):
         if not self.open_list:
             return [];
         
-        if len(text) > 0 and text[-1] == "/":
-            n = dctools.filelist.find(self.open_list.root, self.current, text);
-            return map(lambda p: text + p.repr(), n.children);
+        rest = " ".join(line.split(" ")[1:]);
+        
+        if text == "":
+            lookup = rest;
         else:
-            dirs = text.split("/");
-            dirname = "/".join(dirs[:-1]);
-            basename = dirs[-1];
-            
-            n = dctools.filelist.find(self.open_list.root, self.current, dirname);
-            
-            if not n:
-                return [];
-            
-            if basename == "..":
-                dirname += "/..";
-                basename = "";
-            
-            return map(lambda p: os.path.join(dirname, p.repr()), filter(lambda c: c.name.startswith(basename), n.children));
-    
+            lookup = rest[:-len(text)];
+        
+        n = dctools.filelist.find(self.open_list.root, self.current, lookup);
+        
+        if not n:
+            return [];
+        
+        if not isinstance(n, dctools.filelist.Directory):
+            return [];
+        
+        return map(lambda c: c.repr(), filter(lambda c: c.name.startswith(text), n.children))
+        
+        #if not self.open_list:
+        #    return [];
+        #print line, text;
+        
     def help_ls(self):
-        self.stdout.write("test\n");
-        return "TEST";
+        self.stdout.write("ls: list a directory\n");
+    
+    def help_cd(self):
+        self.stdout.write("cd: change the current directory\n");
+
+    def help_open(self):
+        self.stdout.write("open: open a specific filelist\n");
