@@ -1,8 +1,8 @@
 import xml.parsers.expat
 import collections;
 
-Directory = collections.namedtuple('Directory', 'name children parent')
-File = collections.namedtuple('File', 'name tth size parent')
+Directory = collections.namedtuple('Directory', 'name children')
+File = collections.namedtuple('File', 'name tth size')
 
 def repr_entity(e):
     if isinstance(e, Directory):
@@ -17,33 +17,23 @@ def build_path(e):
         return "/";
     
     parts = list();
+    
     if e.name == "":
         return "/";
 
     return e.name;
     
-#    parts.append(e.name);
-#    
-#    parent = e.parent;
-#
-#    while parent is not None:
-#        parts.append(e.name);
-#        parent = parent.parent;
-#    
-#    parts.reverse();
-#    return "/".join(parts);
-
 def directory_append(d, c):
     d.children.append(c);
 
-def build_file(name, attrs, parent):
-    return File(attrs.pop("Name", None), attrs.pop("TTH", None), int(attrs.pop("Size", None)), parent);
+def build_file(name, attrs):
+    return File(attrs.pop("Name", None), attrs.pop("TTH", None), int(attrs.pop("Size", None)));
 
-def build_directory(name, attrs, parent):
-    return Directory(attrs.pop("Name"), list(), parent);
+def build_directory(name, attrs):
+    return Directory(attrs.pop("Name"), list());
 
 def build_filelisting(name, attrs):
-    return Directory("", list(), None);
+    return Directory("", list());
 
 class FileList:
     def __init__(self, fobj):
@@ -63,11 +53,11 @@ class FileList:
         e = None;
 
         if name == 'File':
-            e = build_file(name, attrs, self.tree[-1]);
+            e = build_file(name, attrs);
             self.tth[e.tth] = e;
             self.names[e.name] = e;
         elif name == 'Directory':
-            e = build_directory(name, attrs, self.tree[-1]);
+            e = build_directory(name, attrs);
         elif name == 'FileListing':
             e = build_filelisting(name, attrs);
             self.root = e;
@@ -134,8 +124,8 @@ def findone(root, parts):
     
     return rlist(root, parts);
 
-def resolve(*path):
-    parts = list();
+def resolve(wd, *path):
+    parts = list(wd);
     
     for p in path:
         if len(p) > 0 and p[0] == "/":

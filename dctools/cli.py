@@ -33,7 +33,7 @@ class TerminalInterpreter(cmd.Cmd):
         import readline;
         cmd.Cmd.__init__(self);
         
-        self.pwd = "";
+        self.pwd = [];
         self.triggers = {
             "my-list": self.my_list,
             "my-filelists": self.my_filelists,
@@ -44,7 +44,6 @@ class TerminalInterpreter(cmd.Cmd):
         
         self.own_list = None;
         self.open_list = None;
-        self.current = None;
         self.handles = dict();
         self.variables = dict();
         
@@ -243,21 +242,20 @@ class TerminalInterpreter(cmd.Cmd):
         file = n[0];
 
         if not isinstance(file, dctools.filelist.Directory):
-            self.printer.error("not a file:", text);
+            self.printer.error("not a directory:", text);
             return;
         
-        self.pwd = "/".join(r);
-        self.current = file;
+        self.pwd = r;
 
     def do_pwd(self, text):
-        self.printer.notice("/" + self.pwd);
+        self.printer.notice("/" + "/".join(self.pwd));
     
     def do_info(self, text):
         if not self.open_list:
             self.printer.error("no open lists");
             return;
         
-        for n in dctools.filelist.findone(self.open_list.root, self.current, text):
+        for n in dctools.filelist.findone(self.open_list.root, dctools.filelist.resolve(self.pwd, text)):
             if isinstance(n, dctools.filelist.File):
                 print "Name:", n.name;
                 print "Size:", n.size;
@@ -286,8 +284,8 @@ class TerminalInterpreter(cmd.Cmd):
         except Exception, e:
           self.printer.notice(str(e) + "");
           return;
-        
-        self.current = self.open_list.root;
+
+        self.pwd = [];
     
     def complete_ls(self, text, line, begidx, endidx):
         return self._complete_dir(text, line, begidx, endidx);
@@ -298,7 +296,7 @@ class TerminalInterpreter(cmd.Cmd):
         if not self.open_list:
             return [];
 
-        rest = " ".join(line.split(" ")[1:]);
+        rest = line.split(" ")[-1];
         
         if text == "":
             lookup = rest;
